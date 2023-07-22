@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
+    <script src="http://localhost:8080/3d/libs/Cesium-1.106/Build/Cesium/Cesium.js"></script>
+    <script src="http://localhost:8080/3d/libs/Cesium-1.106/Apps/Sandcastle/Sandcastle-header.js"></script>
+    <title>Virtual Globe</title>
+</head>
+
+<style>
+    @import url(http://localhost:8080/3d/libs/Cesium-1.106/Apps/Sandcastle/CesiumSandcastle.css);
+    @import url(http://localhost:8080/3d/libs/Cesium-1.106/Apps/Sandcastle/templates/bucket.css);
+</style>
+
+<body>
+    <div id="cesiumContainer" class="fullSize"></div>
+    <div id="loadingOverlay">
+        <h1>Loading...</h1>
+    </div>
+	 
+    <div id="toolbar">
+		<button type="button" id="2d3dswitch" class="cesium-button" onclick="switch2d3d()">2D</button>
+	</div>
+	
+   	<script type="text/javascript">
+async function* makeTextFileLineIterator(fileURL) {
+  const utf8Decoder = new TextDecoder("utf-8");
+  const response = await fetch(fileURL);
+  const reader = response.body.getReader();
+  let { value: chunk, done: readerDone } = await reader.read();
+  chunk = chunk ? utf8Decoder.decode(chunk) : "";
+
+  const newline = /\r?\n/gm;
+  let startIndex = 0;
+  let result;
+
+  while (true) {
+    const result = newline.exec(chunk);
+    if (!result) {
+      if (readerDone) break;
+      const remainder = chunk.substr(startIndex);
+      ({ value: chunk, done: readerDone } = await reader.read());
+      chunk = remainder + (chunk ? utf8Decoder.decode(chunk) : "");
+      startIndex = newline.lastIndex = 0;
+      continue;
+    }
+    yield chunk.substring(startIndex, result.index);
+    startIndex = newline.lastIndex;
+  }
+
+  if (startIndex < chunk.length) {
+    yield chunk.substr(startIndex);
+  }
+}
+
+async function fetchData() {
+	var lat_index = 0;
+	var lon_index = 0;
+	var population_index = 0;
+	var city_index = 0;
+	var first = true;
+	for await (const line of makeTextFileLineIterator("worldcities.csv")) {
+		var data = line.replaceAll('\"', '').split(",")
+		if (first) {
+			first = false
+			for (var i = 0; i < data.length; i++) {
+				switch (data[i]) {
+					case "lat":
+						lat_index = i
+						break
+					case "lng":
+						lon_index = i
+						break
+					case "population":
+						population_index = i
+						break
+					case "city":
+						city_index = i
+						break
+					default:
+						break
+				}
+			}
+		}
+		else {
+			//console.log(data[population_index]);
+			if (parseInt(data[population_index]) > 3000000) {
+				addDataPoint(data[lon_index],
+							 data[lat_index],
+							 data[population_index],
+							 data[city_index]);
+			}
+		}
+    }
+}
+
+
+
+Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJiNjk3NzdjZi00NGUwLTQ4MjctYTI5ZC0zMmJmOTQ2NDIwODYiLCJpZCI6MTUwNjY1LCJpYXQiOjE2ODgyMjgwNzF9.Y7plbpr5SE7jwO-bPrylgPwMOuU6i1M1QOLPaIV-77U'
+	
+ var viewer = new Cesium.Viewer("cesiumContainer",{
+                  Animation: true,
+ });
+ 
+ const population_scale = .01
+ 
+ viewer.resolutionScale = window.devicePixelRatio;
+ viewer.timeline.destroy();
+ viewer.clockViewModel.destroy();
+ viewer.creditDisplay.destroy();
+ viewer._animation.container.hidden = true
+ 
+ 
+
+var _2D = [];
+var _3D = [];
+const entities = viewer.entities; 
+const cylinder = entities.add(new Cesium.Entity());
+const ellipse = entities.add(new Cesium.Entity());
+ellipse.show = false;
+
+_2D.push(ellipse);
+_3D.push(cylinder);
+
+function addDataPoint(lon, lat, population, label=null, color=Cesium.Color.YELLOW, outline=true) {
+	var new2dpoint = viewer.entities.add({
+		position: Cesium.Cartesian3.fromDegrees(lon, lat,0),
+		ellipse: {
+			semiMinorAxis: Math.sqrt(population)*22,
+			semiMajorAxis: Math.sqrt(population)*22,
+			material: color,
+	    },
+	});
+	var new3dpoint = viewer.entities.add({
+		position: Cesium.Cartesian3.fromDegrees(lon, lat,population*0.1),
+		cylinder: {
+			    length: population*0.2,
+                topRadius: 50000.0,
+                bottomRadius: 50000.0,
+			    material: color,
+		},
+	});
+	new2dpoint.name = label;
+	new3dpoint.name = label;
+	new2dpoint.show = false;
+	_2D.push(new2dpoint);
+	_3D.push(new3dpoint);
+};
+
+
+fetchData();
+
+function switch2d3d() {
+	for (var i=0; i < _2D.length; i++) {
+		_2D[i].show = !_2D[i].show;
+		_3D[i].show = !_3D[i].show;
+	}
+	if(document.getElementById("2d3dswitch").textContent == "2D") {
+		document.getElementById("2d3dswitch").textContent = "3D"
+	}
+	else {
+		document.getElementById("2d3dswitch").textContent = "2D"
+	}
+};
+  
+function Task1small() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(40.362707, 57.736663,25000000.0),
+  });
+}
+
+function Task2small() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-79.561984, 8.656684,20000000.0),
+	orientation: {
+      roll: 1.5,
+    },
+  });
+}
+function Task3medium() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(14, 10, 7000000.0),
+  });
+}
+function Task4medium() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(57.448827, 42.484953, 7000000.0),
+  });
+}
+
+function Task5large() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-117.16, 33.71, 1000000.0),
+  });
+}
+function Task6large() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(26, 38, 2000000.0),
+  });
+}
+function Task7small() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(115.233956, -4.979888,22000000.0),
+})
+}
+
+function Task8small() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(45.031664, 34.673755, 22000000.0),
+  });
+}
+function Task9medium() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(-98.645483, 35.320929, 8000000.0),
+  });
+}
+
+function Task10large() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees( -0.436924, 41.013895,2500000.0),
+  });
+}
+
+function Task11large() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(128.011532, 36.528711, 2200000.0),
+  });
+}
+function Task12medium() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(21, 0, 13000000.0),
+  });
+}
+function Task13medium() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees( -98.645483, 40.320929,9000000.0),
+  });
+}
+function Task14medium() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(21, 0, 8000000.0),
+  });
+ }
+
+
+Sandcastle.addToolbarMenu([
+  {
+    text: "Camera Options",
+  },
+  {
+    text: "Task 1 3D",
+    onselect: Task1small
+  }, 
+  {
+    text: "Task 2 2D",
+    onselect: Task2small
+  },
+  {
+    text: "Task 3 3D",
+    onselect: Task3medium
+  },
+  {
+    text: "Task 4 2D",
+    onselect: Task4medium
+  }, 
+  {
+    text: "Task 5 2D",
+    onselect: Task5large
+  },
+  {
+    text: "Task 6 3D",
+    onselect: Task6large
+  },
+
+  {
+    text: "Task 7 2D",
+    onselect: Task7small
+  }, 
+  {
+    text: "Task 8 3D",
+    onselect: Task8small
+  },
+  
+  {
+    text: "Task 9 2D",
+    onselect: Task9medium
+  },
+  {
+    text: "Task 10 3D",
+    onselect: Task10large
+  },
+  {
+    text: "Task 11 2D",
+    onselect: Task11large
+  },
+  {
+    text: "Task 12 3D",
+    onselect: Task12medium
+  },
+  {
+    text: "Task 13 3D",
+    onselect: Task13medium
+  },
+  {
+    text: "Task 14 2D",
+    onselect: Task14medium
+  },
+]);
+ 
+
+Sandcastle.reset = function() {
+    viewer.dataSources.removeAll();
+    viewer.clock.clockRange = Cesium.ClockRange.UNBOUNDED;
+    viewer.clock.clockStep = Cesium.ClockStep.SYSTEM_CLOCK;
+};
+
+	</script>
+  </body>
+</html>
